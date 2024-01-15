@@ -5,6 +5,8 @@ namespace RedisLiteServer.Serializer;
 
 public class GeneralSerializer : RespSerializer
 {
+    private const string DefaultDateFormat = "yyyy-MM-dd HH:mm:ss";
+
     public override string? Serialize(object? message)
     {
         var retult = base.Serialize(message);
@@ -168,7 +170,7 @@ public class GeneralSerializer : RespSerializer
         else if (type == typeof(DateTime))
         {
             var dateTime = (DateTime)obj;
-            return Serialize(dateTime.ToString("yyyy-MM-dd HH:mm:ss"));
+            return Serialize(dateTime.ToString(DefaultDateFormat));
         }
         else
         {

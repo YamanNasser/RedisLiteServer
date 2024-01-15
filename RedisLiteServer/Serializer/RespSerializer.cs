@@ -3,13 +3,24 @@
 namespace RedisLiteServer.Serializer;
 public class RespSerializer
 {
+    private const char SimpleString = '+';
+    private const char Integer = ':';
+    private const char BulkString = '$';
+    private const char Array = '*';
+    private const char ErrorMessage = '-';
+    private const string nil = "$-1\r\n";
+    private const char cr = '\r';
+    private const char lf = '\n';
+    private const string crlf = "\r\n";
+
+
     public virtual string? Serialize(object? message)
     {
         return message switch
         {
-            null => "$-1\r\n",
+            null => nil,
             string str => SerializeBulkString(str),
-            int integer => $":{integer}\r\n",
+            int integer => $"{Integer}{integer}{crlf}",
             IEnumerable<object> array => SerializeArray(array),
             _ => default,
         };
@@ -22,24 +33,24 @@ public class RespSerializer
 
         return message[0] switch
         {
-            '+' => message[1..^2], // Simple string
-            ':' => int.Parse(message[1..^2], CultureInfo.InvariantCulture), // Integer
-            '$' => DeserializeBulkString(message), // Bulk string
-            '*' => DeserializeArray(message), // Array
-            '-' => message[1..^2], // Error message
+            SimpleString => message[1..^2],
+            Integer => int.Parse(message[1..^2], CultureInfo.InvariantCulture),
+            BulkString => DeserializeBulkString(message),
+            Array => DeserializeArray(message),
+            ErrorMessage => message[1..^2],
             _ => throw new NotSupportedException($"Unsupported RESP type: {message[0]}")
         };
     }
 
-    private string SerializeBulkString(string str) => $"${str.Length}\r\n{str}\r\n";
+    private string SerializeBulkString(string str) => $"{BulkString}{str.Length}{crlf}{str}{crlf}";
     private string SerializeArray(IEnumerable<object> array) =>
-        $"*{array.Count()}\r\n{string.Join("", array.Select(Serialize))}";
+        $"{Array}{array.Count()}{crlf}{string.Join("", array.Select(Serialize))}";
 
     private string DeserializeBulkString(string message)
     {
         ReadOnlySpan<char> messageSpan = message.AsSpan();
 
-        int lengthIndex = messageSpan.IndexOf('\r');
+        int lengthIndex = messageSpan.IndexOf(cr);
         if (lengthIndex == -1)
         {
             throw new FormatException("Invalid RESP bulk string format: '\\r' not found.");
@@ -69,7 +80,7 @@ public class RespSerializer
     private List<object> DeserializeArray(string input)
     {
         ReadOnlySpan<char> inputSpan = input.AsSpan();
-        int countEndIndex = inputSpan.IndexOf('\r');
+        int countEndIndex = inputSpan.IndexOf(cr);
         if (countEndIndex == -1)
         {
             throw new FormatException("Invalid array format: '\\r' not found.");
@@ -82,7 +93,7 @@ public class RespSerializer
         }
 
         var elements = new List<object>(count);
-        int currentIndex = inputSpan.Slice(countEndIndex).IndexOf('\n') + countEndIndex + 1;
+        int currentIndex = inputSpan.Slice(countEndIndex).IndexOf(lf) + countEndIndex + 1;
 
         for (int i = 0; i < count && currentIndex < input.Length; i++)
         {
@@ -90,13 +101,13 @@ public class RespSerializer
 
             switch (currentChar)
             {
-                case '$':
+                case BulkString:
                     currentIndex = HandleBulkString(input, currentIndex, elements);
                     break;
-                case ':':
+                case Integer:
                     currentIndex = HandleInteger(input, currentIndex, elements);
                     break;
-                case '*':
+                case Array:
                     currentIndex = HandleNestedArray(input, currentIndex, elements);
                     break;
                 default:
@@ -112,7 +123,7 @@ public class RespSerializer
     private int HandleBulkString(string input, int currentIndex, List<object> elements)
     {
         ReadOnlySpan<char> inputSpan = input.AsSpan();
-        int lengthIndex = inputSpan.Slice(currentIndex).IndexOf('\r');
+        int lengthIndex = inputSpan.Slice(currentIndex).IndexOf(cr);
         if (lengthIndex == -1)
         {
             throw new FormatException("Invalid RESP bulk string format: '\\r' not found.");
@@ -151,7 +162,7 @@ public class RespSerializer
     private int HandleInteger(string input, int currentIndex, List<object> elements)
     {
         ReadOnlySpan<char> inputSpan = input.AsSpan();
-        int endOfInt = inputSpan.Slice(currentIndex).IndexOf('\r');
+        int endOfInt = inputSpan.Slice(currentIndex).IndexOf(cr);
         if (endOfInt == -1)
         {
             throw new FormatException("Invalid integer format: '\\r' not found.");
@@ -189,22 +200,22 @@ public class RespSerializer
 
     private int FindEndOfArray(string input, int start)
     {
-        int endOfLength = input.IndexOf('\r', start);
+        int endOfLength = input.IndexOf(cr, start);
         int numberOfElements = int.Parse(input.Substring(start + 1, endOfLength - start - 1));
         int currentIndex = endOfLength + 2; // Move past "\r\n"
         int elementsProcessed = 0;
 
         while (elementsProcessed < numberOfElements && currentIndex < input.Length)
         {
-            if (input[currentIndex] == '$')
+            if (input[currentIndex] == BulkString)
             {
                 currentIndex = SkipBulkString(input, currentIndex);
             }
-            else if (input[currentIndex] == ':')
+            else if (input[currentIndex] == Integer)
             {
-                currentIndex = input.IndexOf('\n', currentIndex) + 1;
+                currentIndex = input.IndexOf(lf, currentIndex) + 1;
             }
-            else if (input[currentIndex] == '*')
+            else if (input[currentIndex] == Array)
             {
                 currentIndex = FindEndOfArray(input, currentIndex);
             }
@@ -217,12 +228,12 @@ public class RespSerializer
 
     private int SkipBulkString(string input, int currentIndex)
     {
-        int lengthIndex = input.IndexOf('\r', currentIndex);
+        int lengthIndex = input.IndexOf(cr, currentIndex);
         int length = int.Parse(input.Substring(currentIndex + 1, lengthIndex - currentIndex - 1));
 
         if (length == -1)
         {
-            return input.IndexOf('\n', lengthIndex) + 1; // Move past null bulk string
+            return input.IndexOf(lf, lengthIndex) + 1; // Move past null bulk string
         }
 
         return lengthIndex + 2 + length + 2; // Move past the bulk string

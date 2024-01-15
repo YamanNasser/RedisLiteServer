@@ -10,6 +10,22 @@ public class CommandProcessor(string path)
     private readonly string persistenceFilePath = path ?? throw new ArgumentNullException();
     private const string nil = "(nil)";
     private const string ok = "OK";
+
+    #region Commands
+    private const string Command = "COMMAND";
+    private const string Info = "INFO";
+    private const string Set = "SET";
+    private const string Get = "GET";
+    private const string Exists = "EXISTS";
+    private const string Del = "DEL";
+    private const string Incr = "INCR";
+    private const string Decr = "DECR";
+    private const string LPush = "LPUSH";
+    private const string RPush = "RPUSH";
+    private const string Save = "SAVE";
+    private const string Load = "LOAD";
+    #endregion
+
     public string ProcessCommand(string command)
     {
         if (serializer.Deserialize(command) is not List<object> deserializedCommand)
@@ -26,30 +42,30 @@ public class CommandProcessor(string path)
 
         switch (commandType.ToUpper())
         {
-            case "COMMAND" when deserializedCommand.Count == 2:
+            case Command when deserializedCommand.Count == 2:
                 return SerializeResult(SerializeResult(null));
-            case "INFO":
+            case Info:
                 return SerializeResult(ProcessInfoCommand(deserializedCommand));
-            case "SET" when deserializedCommand.Count >= 3:
+            case Set when deserializedCommand.Count >= 3:
                 return SerializeResult(ProcessSetCommand(deserializedCommand));
-            case "GET" when deserializedCommand.Count == 2:
+            case Get when deserializedCommand.Count == 2:
                 return SerializeResult(ProcessGetCommand(deserializedCommand));
-            case "EXISTS" when deserializedCommand.Count == 2:
+            case Exists when deserializedCommand.Count == 2:
                 return SerializeResult(ProcessExistsCommand(deserializedCommand));
-            case "DEL" when deserializedCommand.Count >= 2:
+            case Del when deserializedCommand.Count >= 2:
                 return SerializeResult(ProcessDelCommand(deserializedCommand));
-            case "INCR" when deserializedCommand.Count == 2:
+            case Incr when deserializedCommand.Count == 2:
                 return SerializeResult(ProcessIncrCommand(deserializedCommand));
-            case "DECR" when deserializedCommand.Count == 2:
+            case Decr when deserializedCommand.Count == 2:
                 return SerializeResult(ProcessDecrCommand(deserializedCommand));
-            case "LPUSH" when deserializedCommand.Count >= 3:
+            case LPush when deserializedCommand.Count >= 3:
                 return SerializeResult(ProcessLpushCommand(deserializedCommand));
-            case "RPUSH" when deserializedCommand.Count >= 3:
+            case RPush when deserializedCommand.Count >= 3:
                 return SerializeResult(ProcessRpushCommand(deserializedCommand));
-            case "SAVE" when deserializedCommand.Count == 1:
+            case Save when deserializedCommand.Count == 1:
                 ProcessSaveCommand(persistenceFilePath);
                 return SerializeResult(ok);
-            case "LOAD" when deserializedCommand.Count == 1:
+            case Load when deserializedCommand.Count == 1:
                 ProcessLoadCommand(persistenceFilePath);
                 return SerializeResult(ok);
             default:
